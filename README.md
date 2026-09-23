@@ -37,7 +37,7 @@ Silicon builds, and earlier Java 11 and Java 17 ports are not included here.
 
 ## Minecraft
 
-Minecraft's game libraries changed a lot with the release of Minecraft 26.1, and many of the game libraries require newer MacOS APIs, specifically SDL, FreeType, OpenAL, and shader. Even with the JDK 25 build working, Minecraft specifically cannot run. I have written packages that patch these issues, available separately here:
+Minecraft's game libraries changed a lot with the release of Minecraft 26.1, and many of the game libraries require newer MacOS APIs, specifically SDL, FreeType, OpenAL, and shader. Even with the JDK 25 build working, Minecraft specifically cannot run. I have written packages that patch these issues, available separately here: [Minecraft Patches for Legacy OS X](https://github.com/Hiker159/minecraft-jdk-patches)
 
 ## Build from source
 
