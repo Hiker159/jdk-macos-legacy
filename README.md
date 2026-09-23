@@ -1,15 +1,13 @@
 # jdk-macos-legacy
 
-Patches for OpenJDK to create builds for Mac OS X 10.6 and later.
+Patches for OpenJDK to create builds for Mac OS X 10.9 and later.
 
 ## Supported versions
 | JDK Version | Minimum macOS version | Notes | Latest Build|
 |-------------|-----------------------|-------|-------------|
-| 1.8 (LTS)   | Mac OS X 10.6         |       | Soon:tm:    |
-| 11 (LTS)    | Mac OS X 10.6         |       | Soon:tm:    |
-| 17 (LTS)    | OS X 10.8             |       | Soon:tm:    |
-| 21 (LTS)    | OS X 10.8             |       | Soon:tm:    |
-| 22          | OS X 10.8             |       | Soon:tm:    |
+| 21 (LTS)    | OS X 10.9             |       | Soon:tm:    |
+| 22          | OS X 10.9             |       | Soon:tm:    |
+| 25          | OS X 10.9
 
 ## Prebuilt releases
 Builds of the OpenJDK are compiled from release tags on a regular basis. These builds are available for download from the [releases page](https://github.com/Jazzzny/jdk-macos-legacy/releases) of this repository. If you need a build for a specific version of the JDK (i.e. 1.8), you can find it in the "Latest Build" column of the table above.
