@@ -1,0 +1,538 @@
+--- a/make/autoconf/flags.m4
++++ b/make/autoconf/flags.m4
+@@ -136,7 +136,7 @@
+     if test "x$OPENJDK_TARGET_CPU_ARCH" = xaarch64; then
+       MACOSX_VERSION_MIN=11.00.00
+     else
+-      MACOSX_VERSION_MIN=10.12.0
++      MACOSX_VERSION_MIN=10.9.0
+     fi
+     MACOSX_VERSION_MIN_NODOTS=${MACOSX_VERSION_MIN//\./}
+ 
+--- a/make/autoconf/toolchain.m4
++++ b/make/autoconf/toolchain.m4
+@@ -754,31 +754,10 @@
+     UTIL_REQUIRE_PROGS(OTOOL, otool)
+     UTIL_REQUIRE_PROGS(INSTALL_NAME_TOOL, install_name_tool)
+ 
+-    UTIL_LOOKUP_TOOLCHAIN_PROGS(METAL, metal)
+-    if test "x$METAL" = x; then
+-      AC_MSG_CHECKING([if metal can be run using xcrun])
+-      METAL="xcrun -sdk macosx metal"
+-      test_metal=`$METAL --version 2>&1`
+-      if test $? -ne 0; then
+-        AC_MSG_RESULT([no])
+-        AC_MSG_ERROR([XCode tool 'metal' neither found in path nor with xcrun])
+-      else
+-        AC_MSG_RESULT([yes, will be using '$METAL'])
+-      fi
+-    fi
+-
+-    UTIL_LOOKUP_TOOLCHAIN_PROGS(METALLIB, metallib)
+-    if test "x$METALLIB" = x; then
+-      AC_MSG_CHECKING([if metallib can be run using xcrun])
+-      METALLIB="xcrun -sdk macosx metallib"
+-      test_metallib=`$METALLIB --version 2>&1`
+-      if test $? -ne 0; then
+-        AC_MSG_RESULT([no])
+-        AC_MSG_ERROR([XCode tool 'metallib' neither found in path nor with xcrun])
+-      else
+-        AC_MSG_RESULT([yes, will be using '$METALLIB'])
+-      fi
+-    fi
++    # This legacy build uses OpenGL and does not compile Metal shaders.
++    METAL=
++    METALLIB=
++
+   fi
+ 
+   if test "x$TOOLCHAIN_TYPE" = xmicrosoft; then
+--- a/make/modules/java.desktop/lib/Awt2dLibraries.gmk
++++ b/make/modules/java.desktop/lib/Awt2dLibraries.gmk
+@@ -158,7 +158,6 @@
+     LIBS_macosx := -lmlib_image \
+         -framework Cocoa \
+         -framework OpenGL \
+-        -framework Metal \
+         -framework JavaRuntimeSupport \
+         -framework ApplicationServices \
+         -framework AudioToolbox, \
+@@ -754,8 +753,7 @@
+         -framework ApplicationServices \
+         -framework Foundation \
+         -framework Security \
+-        -framework Cocoa \
+-        -framework Metal
++        -framework Cocoa
+   else ifeq ($(call isTargetOs, windows), true)
+     LIBSPLASHSCREEN_LIBS += kernel32.lib user32.lib gdi32.lib delayimp.lib $(WIN_JAVA_LIB) jvm.lib
+   else
+@@ -827,7 +825,6 @@
+       libawt_lwawt/awt \
+       libawt_lwawt/font \
+       libawt_lwawt/java2d/opengl \
+-      libawt_lwawt/java2d/metal \
+       include \
+       common/awt/debug \
+       common/java2d/opengl \
+@@ -837,7 +834,8 @@
+   LIBAWT_LWAWT_CFLAGS := $(X_CFLAGS) $(X_LIBS)
+ 
+   LIBAWT_LWAWT_EXFILES := fontpath.c awt_Font.c X11Color.c
+-  LIBAWT_LWAWT_EXCLUDES := $(TOPDIR)/src/$(MODULE)/unix/native/common/awt/medialib
++  LIBAWT_LWAWT_EXCLUDES := $(TOPDIR)/src/$(MODULE)/unix/native/common/awt/medialib \
++      $(TOPDIR)/src/$(MODULE)/macosx/native/libawt_lwawt/java2d/metal
+ 
+   $(eval $(call SetupJdkLibrary, BUILD_LIBAWT_LWAWT, \
+       NAME := awt_lwawt, \
+@@ -872,7 +870,6 @@
+           -framework AudioToolbox \
+           -framework Carbon \
+           -framework Cocoa \
+-          -framework Metal \
+           -framework Security \
+           -framework ExceptionHandling \
+           -framework JavaRuntimeSupport \
+@@ -908,31 +905,6 @@
+ endif
+ 
+ ifeq ($(call isTargetOs, macosx), true)
+-  SHADERS_SRC := $(TOPDIR)/src/java.desktop/macosx/native/libawt_lwawt/java2d/metal/shaders.metal
+-  SHADERS_SUPPORT_DIR := $(SUPPORT_OUTPUTDIR)/native/java.desktop/libosxui
+-  SHADERS_AIR := $(SHADERS_SUPPORT_DIR)/shaders.air
+-  SHADERS_LIB := $(INSTALL_LIBRARIES_HERE)/shaders.metallib
+-
+-  $(eval $(call SetupExecute, metal_shaders, \
+-      INFO := Running metal on $(notdir $(SHADERS_SRC)) (for libosxui.dylib), \
+-      DEPS := $(SHADERS_SRC), \
+-      OUTPUT_FILE := $(SHADERS_AIR), \
+-      SUPPORT_DIR := $(SHADERS_SUPPORT_DIR), \
+-      COMMAND := $(METAL) -c -std=osx-metal2.0 \
+-          -mmacosx-version-min=$(MACOSX_METAL_VERSION_MIN) \
+-          -o $(SHADERS_AIR) $(SHADERS_SRC), \
+-  ))
+-
+-  $(eval $(call SetupExecute, metallib_shaders, \
+-      INFO := Running metallib on $(notdir $(SHADERS_AIR)) (for libosxui.dylib), \
+-      DEPS := $(SHADERS_AIR), \
+-      OUTPUT_FILE := $(SHADERS_LIB), \
+-      SUPPORT_DIR := $(SHADERS_SUPPORT_DIR), \
+-      COMMAND := $(METALLIB) -o $(SHADERS_LIB) $(SHADERS_AIR), \
+-  ))
+-
+-  TARGETS += $(SHADERS_LIB)
+-
+   $(eval $(call SetupJdkLibrary, BUILD_LIBOSXUI, \
+       NAME := osxui, \
+       OPTIMIZATION := LOW, \
+@@ -948,7 +920,6 @@
+           -L$(INSTALL_LIBRARIES_HERE), \
+       LIBS := -lawt -losxapp -lawt_lwawt \
+           -framework Cocoa \
+-          -framework Metal \
+           -framework Carbon \
+           -framework ApplicationServices \
+           -framework JavaRuntimeSupport \
+@@ -956,7 +927,6 @@
+   ))
+ 
+   TARGETS += $(BUILD_LIBOSXUI)
+-  $(BUILD_LIBOSXUI): $(SHADERS_LIB)
+ 
+   $(BUILD_LIBOSXUI): $(BUILD_LIBAWT)
+ 
+--- /dev/null
++++ b/src/hotspot/os/bsd/legacy_macos_clock.hpp
+@@ -0,0 +1,40 @@
++/*
++ * Copyright (c) 2026, jdk-macos-legacy contributors.
++ * SPDX-License-Identifier: GPL-2.0-only
++ */
++#ifndef OS_BSD_LEGACY_MACOS_CLOCK_HPP
++#define OS_BSD_LEGACY_MACOS_CLOCK_HPP
++
++#include <errno.h>
++#include <mach/mach_time.h>
++#include <sys/time.h>
++#include <time.h>
++
++// Like the bundled JDK 11 port, use gettimeofday for wall time and
++// mach_absolute_time for monotonic time. clock_gettime needs macOS 10.12.
++static inline int legacy_macos_clock_gettime(clockid_t clock, timespec* ts) {
++  if (clock == CLOCK_REALTIME) {
++    timeval tv;
++    int result = gettimeofday(&tv, nullptr);
++    if (result == 0) {
++      ts->tv_sec = tv.tv_sec;
++      ts->tv_nsec = tv.tv_usec * 1000;
++    }
++    return result;
++  }
++  if (clock == CLOCK_MONOTONIC) {
++    mach_timebase_info_data_t info;
++    if (mach_timebase_info(&info) != KERN_SUCCESS || info.denom == 0) {
++      errno = EINVAL;
++      return -1;
++    }
++    // Wide arithmetic avoids overflow after long uptime.
++    __uint128_t nanos = (__uint128_t)mach_absolute_time() * info.numer / info.denom;
++    ts->tv_sec = (time_t)(nanos / 1000000000);
++    ts->tv_nsec = (long)(nanos % 1000000000);
++    return 0;
++  }
++  errno = EINVAL;
++  return -1;
++}
++#endif
+--- a/src/hotspot/os/bsd/os_bsd.cpp
++++ b/src/hotspot/os/bsd/os_bsd.cpp
+@@ -1660,7 +1660,7 @@
+ static char* anon_mmap(char* requested_addr, size_t bytes, bool exec) {
+   // MAP_FIXED is intentionally left out, to leave existing mappings intact.
+   const int flags = MAP_PRIVATE | MAP_NORESERVE | MAP_ANONYMOUS
+-      MACOS_ONLY(| (exec ? MAP_JIT : 0));
++      MACOS_AARCH64_ONLY(| (exec ? MAP_JIT : 0));
+ 
+   // Map reserved/uncommitted pages PROT_NONE so we fail early if we
+   // touch an uncommitted page. Otherwise, the read/write might
+--- a/src/hotspot/os/bsd/os_perf_bsd.cpp
++++ b/src/hotspot/os/bsd/os_perf_bsd.cpp
+@@ -21,6 +21,12 @@
+  * questions.
+  *
+  */
++#ifdef __APPLE__
++#include "legacy_macos_clock.hpp"
++#define LEGACY_CLOCK_GETTIME legacy_macos_clock_gettime
++#else
++#define LEGACY_CLOCK_GETTIME clock_gettime
++#endif
+ #include "precompiled.hpp"
+ #include "memory/allocation.inline.hpp"
+ #include "memory/resourceArea.hpp"
+@@ -58,7 +64,7 @@
+ 
+   bool now_in_nanos(uint64_t* resultp) {
+     struct timespec tp;
+-    int status = clock_gettime(CLOCK_REALTIME, &tp);
++    int status = LEGACY_CLOCK_GETTIME(CLOCK_REALTIME, &tp);
+     assert(status == 0, "clock_gettime error: %s", os::strerror(errno));
+     if (status != 0) {
+       return false;
+--- a/src/hotspot/os/posix/os_posix.cpp
++++ b/src/hotspot/os/posix/os_posix.cpp
+@@ -22,6 +22,12 @@
+  *
+  */
+ 
++#ifdef __APPLE__
++#include "legacy_macos_clock.hpp"
++#define LEGACY_CLOCK_GETTIME legacy_macos_clock_gettime
++#else
++#define LEGACY_CLOCK_GETTIME clock_gettime
++#endif
+ #include "classfile/classLoader.hpp"
+ #include "jvm.h"
+ #include "jvmtifiles/jvmti.h"
+@@ -1350,7 +1356,7 @@
+   }
+ 
+   struct timespec now;
+-  int status = clock_gettime(clock, &now);
++  int status = LEGACY_CLOCK_GETTIME(clock, &now);
+   assert(status == 0, "clock_gettime error: %s", os::strerror(errno));
+ 
+   if (!isAbsolute) {
+@@ -1378,7 +1384,7 @@
+ 
+ jlong os::javaTimeMillis() {
+   struct timespec ts;
+-  int status = clock_gettime(CLOCK_REALTIME, &ts);
++  int status = LEGACY_CLOCK_GETTIME(CLOCK_REALTIME, &ts);
+   assert(status == 0, "clock_gettime error: %s", os::strerror(errno));
+   return jlong(ts.tv_sec) * MILLIUNITS +
+     jlong(ts.tv_nsec) / NANOUNITS_PER_MILLIUNIT;
+@@ -1386,7 +1392,7 @@
+ 
+ void os::javaTimeSystemUTC(jlong &seconds, jlong &nanos) {
+   struct timespec ts;
+-  int status = clock_gettime(CLOCK_REALTIME, &ts);
++  int status = LEGACY_CLOCK_GETTIME(CLOCK_REALTIME, &ts);
+   assert(status == 0, "clock_gettime error: %s", os::strerror(errno));
+   seconds = jlong(ts.tv_sec);
+   nanos = jlong(ts.tv_nsec);
+@@ -1400,7 +1406,7 @@
+ 
+ jlong os::javaTimeNanos() {
+   struct timespec tp;
+-  int status = clock_gettime(CLOCK_MONOTONIC, &tp);
++  int status = LEGACY_CLOCK_GETTIME(CLOCK_MONOTONIC, &tp);
+   assert(status == 0, "clock_gettime error: %s", os::strerror(errno));
+   jlong result = jlong(tp.tv_sec) * NANOSECS_PER_SEC + jlong(tp.tv_nsec);
+   return result;
+--- a/src/java.base/macosx/native/libnio/fs/BsdNativeDispatcher.c
++++ b/src/java.base/macosx/native/libnio/fs/BsdNativeDispatcher.c
+@@ -45,6 +45,7 @@
+ #include <string.h>
+ #include <sys/attr.h>
+ #include <sys/clonefile.h>
++#include <dlfcn.h>
+ 
+ static jfieldID entry_name;
+ static jfieldID entry_dir;
+@@ -235,7 +236,17 @@
+     const char* src = (const char*)jlong_to_ptr(srcAddress);
+     const char* dst = (const char*)jlong_to_ptr(dstAddress);
+ 
+-    int ret = clonefile(src, dst, flags);
++    // clonefile was introduced after Mavericks. ENOTSUP selects the
++    // existing Java copy fallback, preserving Files.copy semantics.
++    typedef int (*clonefile_func)(const char *, const char *, uint32_t);
++    clonefile_func clone_func = (clonefile_func)dlsym(RTLD_DEFAULT, "clonefile");
++    int ret;
++    if (clone_func == NULL) {
++        errno = ENOTSUP;
++        ret = -1;
++    } else {
++        ret = clone_func(src, dst, flags);
++    }
+     if (ret != 0) {
+         throwUnixException(env, errno);
+         return ret;
+--- a/src/java.base/unix/native/libnio/ch/DatagramChannelImpl.c
++++ b/src/java.base/unix/native/libnio/ch/DatagramChannelImpl.c
+@@ -50,10 +50,6 @@
+     jint fd = fdval(env, fdo);
+     int rv;
+ 
+-#if defined(__APPLE__)
+-    // On macOS systems we use disconnectx
+-    rv = disconnectx(fd, SAE_ASSOCID_ANY, SAE_CONNID_ANY);
+-#else
+     SOCKETADDRESS sa;
+     memset(&sa, 0, sizeof(sa));
+     #if defined(_ALLBSD_SOURCE)
+@@ -64,14 +60,9 @@
+     socklen_t len = isIPv6 ? sizeof(struct sockaddr_in6) :
+                              sizeof(struct sockaddr_in);
+     rv = connect(fd, &sa.sa, len);
+-#endif
+ 
+-#if defined(_ALLBSD_SOURCE) && !defined(__APPLE__)
+-    // On _ALLBSD_SOURCE except __APPLE__ we consider EADDRNOTAVAIL
+-    // error to be OK and ignore it. __APPLE__ systems are excluded
+-    // in this check since for __APPLE__ systems, unlike other BSD systems,
+-    // we issue a "disconnectx" call (a few lines above),
+-    // which isn't expected to return this error code.
++#if defined(_ALLBSD_SOURCE)
++    // BSD disconnect via connect may report EADDRNOTAVAIL on success.
+     if (rv < 0 && errno == EADDRNOTAVAIL)
+         rv = errno = 0;
+ #elif defined(_AIX)
+--- a/src/java.desktop/macosx/classes/sun/java2d/MacOSFlags.java
++++ b/src/java.desktop/macosx/classes/sun/java2d/MacOSFlags.java
+@@ -87,60 +87,14 @@
+     private static void initJavaFlags() {
+         java.security.AccessController.doPrivileged(
+                 (PrivilegedAction<Object>) () -> {
+-                    PropertyState oglState = getBooleanProp("sun.java2d.opengl", PropertyState.UNSPECIFIED);
+-                    PropertyState metalState = getBooleanProp("sun.java2d.metal", PropertyState.UNSPECIFIED);
+-
+-                    // Handle invalid combinations to use the default rendering pipeline
+-                    // The default rendering pipeline is Metal
+-                    if ((oglState == PropertyState.UNSPECIFIED && metalState == PropertyState.UNSPECIFIED) ||
+-                        (oglState == PropertyState.DISABLED && metalState == PropertyState.DISABLED) ||
+-                        (oglState == PropertyState.ENABLED && metalState == PropertyState.ENABLED)) {
+-                        metalState = PropertyState.ENABLED; // Enable default pipeline
+-                        oglState = PropertyState.DISABLED; // Disable non-default pipeline
+-                    }
+-
+-                    if (metalState == PropertyState.UNSPECIFIED) {
+-                        if (oglState == PropertyState.DISABLED) {
+-                            oglEnabled = false;
+-                            metalEnabled = true;
+-                        } else {
+-                            oglEnabled = true;
+-                            metalEnabled = false;
+-                        }
+-                    } else if (metalState == PropertyState.ENABLED) {
+-                        oglEnabled = false;
+-                        metalEnabled = true;
+-                    } else if (metalState == PropertyState.DISABLED) {
+-                        oglEnabled = true;
+-                        metalEnabled = false;
+-                    }
+-
++                    // Mavericks has no Metal framework. Never fall back to Metal,
++                    // even when a launcher explicitly requests it.
++                    metalEnabled = false;
++                    metalVerbose = isBooleanPropTrueVerbose("sun.java2d.metal");
+                     oglVerbose = isBooleanPropTrueVerbose("sun.java2d.opengl");
+-                    metalVerbose = isBooleanPropTrueVerbose("sun.java2d.metal");
+-
+-                    if (oglEnabled && !metalEnabled) {
+-                        // Check whether OGL is available
+-                        if (!CGLGraphicsConfig.isCGLAvailable()) {
+-                            if (oglVerbose) {
+-                                System.out.println("Could not enable OpenGL pipeline (CGL not available)");
+-                            }
+-                            oglEnabled = false;
+-                            metalEnabled = MTLGraphicsConfig.isMetalAvailable();
+-                        }
+-                    } else if (metalEnabled && !oglEnabled) {
+-                        // Check whether Metal framework is available
+-                        if (!MTLGraphicsConfig.isMetalAvailable()) {
+-                            if (metalVerbose) {
+-                                System.out.println("Could not enable Metal pipeline (Metal framework not available)");
+-                            }
+-                            metalEnabled = false;
+-                            oglEnabled = CGLGraphicsConfig.isCGLAvailable();
+-                        }
+-                    }
+-
+-                    // At this point one of the rendering pipeline must be enabled.
+-                    if (!metalEnabled && !oglEnabled) {
+-                        throw new InternalError("Error - unable to initialize any rendering pipeline.");
++                    oglEnabled = CGLGraphicsConfig.isCGLAvailable();
++                    if (!oglEnabled) {
++                        throw new InternalError("Legacy macOS build requires OpenGL.");
+                     }
+ 
+                     return null;
+--- a/src/java.desktop/macosx/classes/sun/java2d/metal/MTLGraphicsConfig.java
++++ b/src/java.desktop/macosx/classes/sun/java2d/metal/MTLGraphicsConfig.java
+@@ -100,7 +100,7 @@
+     private static native int nativeGetMaxTextureSize();
+ 
+     static {
+-        mtlAvailable = isMetalFrameworkAvailable();
++        mtlAvailable = false;
+     }
+ 
+     private MTLGraphicsConfig(CGraphicsDevice device,
+--- a/src/java.desktop/macosx/native/libawt_lwawt/awt/AWTSurfaceLayers.m
++++ b/src/java.desktop/macosx/native/libawt_lwawt/awt/AWTSurfaceLayers.m
+@@ -29,7 +29,6 @@
+ #import "JNIUtilities.h"
+ 
+ #import <QuartzCore/CATransaction.h>
+-#import <QuartzCore/CAMetalLayer.h>
+ 
+ @implementation AWTSurfaceLayers
+ 
+@@ -71,8 +70,7 @@
+ // Updates back buffer size of the layer if it's an OpenGL/Metal layer
+ // including all OpenGL/Metal sublayers
+ + (void) repaintLayersRecursively:(CALayer*)aLayer {
+-    if ([aLayer isKindOfClass:[CAOpenGLLayer class]] ||
+-        [aLayer isKindOfClass:[CAMetalLayer class]]) {
++    if ([aLayer isKindOfClass:[CAOpenGLLayer class]]) {
+         [aLayer setNeedsDisplay];
+     }
+     for(CALayer *child in aLayer.sublayers) {
+--- a/src/java.desktop/macosx/native/libawt_lwawt/awt/AWTView.m
++++ b/src/java.desktop/macosx/native/libawt_lwawt/awt/AWTView.m
+@@ -965,7 +965,7 @@
+ 
+     if ((utf16Length > 2) ||
+         ((utf8Length > 1) && [self isCodePointInUnicodeBlockNeedingIMEvent:codePoint]) ||
+-        ((codePoint == 0x5c) && ([(NSString *)kbdLayout containsString:@"Kotoeri"]))) {
++        ((codePoint == 0x5c) && ((kbdLayout != nil && [(NSString *)kbdLayout rangeOfString:@"Kotoeri"].location != NSNotFound)))) {
+ #ifdef IM_DEBUG
+         NSLog(@"string complex ");
+ #endif
+--- a/src/java.desktop/macosx/native/libawt_lwawt/awt/AWTWindow.m
++++ b/src/java.desktop/macosx/native/libawt_lwawt/awt/AWTWindow.m
+@@ -215,7 +215,10 @@
+         type |= NSTitledWindowMask;
+         if (IS(styleBits, CLOSEABLE))            type |= NSWindowStyleMaskClosable;
+         if (IS(styleBits, RESIZABLE))            type |= NSWindowStyleMaskResizable;
+-        if (IS(styleBits, FULL_WINDOW_CONTENT))  type |= NSWindowStyleMaskFullSizeContentView;
++        if (IS(styleBits, FULL_WINDOW_CONTENT) &&
++            [NSWindow instancesRespondToSelector:@selector(setTitleVisibility:)]) {
++            type |= NSWindowStyleMaskFullSizeContentView;
++        }
+     } else {
+         type |= NSWindowStyleMaskBorderless;
+     }
+@@ -1106,6 +1109,9 @@
+ {
+     JNI_COCOA_ENTER(env);
+     [ThreadUtilities performOnMainThreadWaiting:NO block:^(){
++        if (![NSWindow respondsToSelector:@selector(setAllowsAutomaticWindowTabbing:)]) {
++            return;
++        }
+         if (allowAutomaticTabbing) {
+             [NSWindow setAllowsAutomaticWindowTabbing:YES];
+         } else {
+--- a/src/java.desktop/macosx/native/libawt_lwawt/awt/CTrayIcon.h
++++ b/src/java.desktop/macosx/native/libawt_lwawt/awt/CTrayIcon.h
+@@ -61,7 +61,7 @@
+ //==================================================================================
+ /*
+  * AWTTrayIconView */
+-@interface AWTTrayIconView : NSStatusBarButton <NSMenuDelegate> {
++@interface AWTTrayIconView : NSButton <NSMenuDelegate> {
+ @public
+     AWTTrayIcon *trayIcon;
+     NSTrackingArea *trackingArea;
+--- a/src/java.desktop/macosx/native/libawt_lwawt/awt/CTrayIcon.m
++++ b/src/java.desktop/macosx/native/libawt_lwawt/awt/CTrayIcon.m
+@@ -184,6 +184,8 @@
+ -(id)initWithTrayIcon:(AWTTrayIcon *)theTrayIcon {
+     self = [super initWithFrame:NSMakeRect(0, 0, 1, 1)];
+ 
++    [self setBordered:NO];
++    [self setImagePosition:NSImageOnly];
+     [self setTrayIcon: theTrayIcon];
+     [self setImage: nil];
+     isHighlighted = NO;
+--- a/src/java.desktop/macosx/native/libawt_lwawt/awt/a11y/CommonComponentAccessibility.h
++++ b/src/java.desktop/macosx/native/libawt_lwawt/awt/a11y/CommonComponentAccessibility.h
+@@ -31,7 +31,7 @@
+ #import <AppKit/AppKit.h>
+ #import "JavaAccessibilityUtilities.h"
+ 
+-@interface CommonComponentAccessibility : NSAccessibilityElement {
++@interface CommonComponentAccessibility : NSObject <NSAccessibility> {
+     NSView *fView;
+     NSObject *fParent;
+ 
+--- a/src/java.desktop/macosx/native/libawt_lwawt/awt/a11y/CommonComponentAccessibility.m
++++ b/src/java.desktop/macosx/native/libawt_lwawt/awt/a11y/CommonComponentAccessibility.m
+@@ -1204,7 +1204,7 @@
+         ![[self actionSelectors] containsObject:NSStringFromSelector(selector)]) {
+         return NO;
+     }
+-    return [super isAccessibilitySelectorAllowed:selector];
++    return [self respondsToSelector:selector]; // No NSAccessibilityElement defaults.
+ }
+ 
+ - (BOOL)accessibilityPerformPick {
+--- a/src/java.desktop/macosx/native/libawt_lwawt/awt/a11y/MenuAccessibility.m
++++ b/src/java.desktop/macosx/native/libawt_lwawt/awt/a11y/MenuAccessibility.m
+@@ -35,7 +35,10 @@
+         if ([[[self parent] javaRole] isEqualToString:@"combobox"]) {
+             return NSAccessibilityPopUpButtonRole;
+         } else if ([[[self parent] javaRole] isEqualToString:@"menubar"]) {
+-            return NSAccessibilityMenuBarItemRole;
++            if (@available(macOS 10.12, *)) {
++                return NSAccessibilityMenuBarItemRole;
++            }
++            return NSAccessibilityMenuItemRole;
+         } else {
+             return NSAccessibilityMenuRole;
+         }
+--- a/src/java.desktop/share/native/libsplashscreen/libpng/pngpriv.h
++++ b/src/java.desktop/share/native/libsplashscreen/libpng/pngpriv.h
+@@ -542,7 +542,9 @@
+     */
+ #  include <float.h>
+ 
+-#  if (defined(__MWERKS__) && defined(macintosh)) || defined(applec) || \
++#  if defined(__APPLE__) && defined(__MACH__)
++#    include <math.h> /* Darwin, including SDKs that no longer provide fp.h. */
++#  elif (defined(__MWERKS__) && defined(macintosh)) || defined(applec) || \
+     defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)
+    /* We need to check that <math.h> hasn't already been included earlier
+     * as it seems it doesn't agree with <fp.h>, yet we should really use
